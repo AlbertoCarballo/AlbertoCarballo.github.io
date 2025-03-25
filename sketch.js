@@ -123,7 +123,7 @@ class jugador {
 class Pelota {
   constructor() {
     this.reset();
-    this.speedIncrement = 1.02; // Incremento constante en cada colisión
+    this.speedIncrement = 1.02; 
     this.color = color(random(255), random(255), random(255));
   }
 
@@ -145,7 +145,6 @@ class Pelota {
     this.x += this.xSpeed;
     this.y += this.ySpeed;
 
-    // Rebota en las paredes superiores e inferiores
     if (this.y < 0 || this.y > height) {
       this.ySpeed *= -1;
     }
@@ -157,26 +156,20 @@ class Pelota {
       this.y + this.size / 2 > jugador.y &&
       this.y - this.size / 2 < jugador.y + jugador.height) {
 
-      // Invertir la dirección en el eje X
       this.xSpeed *= -1;
 
-      // Determinar en qué parte del jugador ocurrió la colisión
       let offset = (this.y - (jugador.y + jugador.height / 2)) / (jugador.height / 2);
 
-      // Si la colisión fue en la parte superior o inferior, cambiar la dirección vertical
       if (Math.abs(offset) > 0.5) {
-        this.ySpeed = offset * 5; // Cambiar dirección hacia arriba o abajo
+        this.ySpeed = offset * 5; 
       }
 
-      // Incrementar las velocidades de la pelota tras la colisión (aumenta de forma constante en ambos ejes)
       this.xSpeed *= this.speedIncrement;
       this.ySpeed *= this.speedIncrement;
 
-      // Cambiar color de la pelota
       this.color = color(random(255), random(255), random(255));
       jugador.changeColor();
 
-      // Mover la pelota ligeramente fuera del área de la paleta para evitar colisiones múltiples
       if (this.xSpeed > 0) {
         this.x = jugador.x + jugador.width + this.size / 2;
       } else {

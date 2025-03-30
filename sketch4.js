@@ -45,7 +45,7 @@ function initializeGame() {
     let totalHeight = Math.ceil(cartaImagenes
         .length / GRID_COLS) * (ALTURA_CARTA + PADDING) - PADDING;
     offsetX = (windowWidth - totalWidth) / 2;
-    offsetY = (windowHeight - totalHeight) / 2 + 25;
+    offsetY = (windowHeight - totalHeight) / 2 + 50;
 
     cartas = [];
     for (let i = 0; i < cartaImagenes

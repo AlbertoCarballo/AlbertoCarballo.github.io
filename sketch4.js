@@ -45,7 +45,7 @@ function initializeGame() {
     let totalHeight = Math.ceil(cartaImagenes
         .length / GRID_COLS) * (ALTURA_CARTA + PADDING) - PADDING;
     offsetX = (windowWidth - totalWidth) / 2;
-    offsetY = (windowHeight - totalHeight) / 2 + 50;
+    offsetY = (windowHeight - totalHeight) / 2+30;
 
     cartas = [];
     for (let i = 0; i < cartaImagenes
@@ -82,6 +82,7 @@ function draw() {
         textAlign(CENTER, TOP);
         text('Tiempo: ' + segundos + 's', width / 2, 20);
         text('Alumno: Carballo Caballero Jesus Alberto', width / 2, 60);
+        text('Alumno: Gutierrez Arce Andrey Julian', width / 2, 100);
     }
 
     for (let card of cartas) {

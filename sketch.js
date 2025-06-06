@@ -1,183 +1,402 @@
-let jugador1, jugador2;
-let pelota;
-let puntuacionJ1 = 0, puntuacionJ2 = 0;
-let puntajeGanador = 10;
-let mostrarInstrucciones = true;
+let paddle, blocks = [], level = 1;
+let cols = 8;
+let rows = 4;
+let score = 0;
+let lives = 3;
+let gameStarted = false;
+let hitSound;
+
+let transitioning = false;
+let transitionTimer = 0;
+let transitionDuration = 60;
+let paused = false;
+
+let powerUps = [];
+let balls = [];
+
+function preload() {
+  hitSound = loadSound('./sounds/hit.wav');
+  powerUpSound = loadSound('./sounds/powerup.mp3');
+  bgMusic = loadSound('./sounds/background_music.mp3'); 
+}
 
 function setup() {
   createCanvas(600, 400);
-  jugador1 = new jugador(10, height / 2 - 50);
-  jugador2 = new jugador(width - 20, height / 2 - 50);
-  pelota = new Pelota();
+  paddle = new Paddle();
+  balls = [new Ball()];
+  createBlocks();
+  bgMusic.setLoop(true);
+  bgMusic.setVolume(0.3);
+  bgMusic.play();
 }
 
 function draw() {
-  background(173, 216, 230);
-
-  if (mostrarInstrucciones) {
-    fill(0);
-    textSize(24); 
-    textAlign(LEFT, TOP);
-    text("            Equipo: Carballo Caballero Jesus Alberto\n                                          y\n                   Gutierrez Arce Andrey Julian", 10, 10);
+  if (paused) {
+    fill(255);
+    textSize(32);
     textAlign(CENTER, CENTER);
-    text("Jugador 1: W para arriba, S para abajo", width / 2, height / 3);
-    text("Jugador 2: Flecha arriba para arriba\nFlecha abajo para abajo", width / 2, height / 2);
-    text("Presiona 'P' para comenzar", width / 2, (2 * height) / 3);
+    text("PAUSADO", width / 2, height / 2);
     return;
   }
 
-  fill(0);
-  textSize(32);
-  text(puntuacionJ1, 50, 50);
-  text(puntuacionJ2, width - 100, 50);
+  background(0, 0, 0);
 
-
-
-  if (puntuacionJ1 >= puntajeGanador || puntuacionJ2 >= puntajeGanador) {
-    textSize(64);
+  if (transitioning) {
+    fill(255);
+    textSize(28);
     textAlign(CENTER, CENTER);
-    let winner = puntuacionJ1 > puntuacionJ2 ? "Jugador 1" : "Jugador 2";
-    text(`${winner} Gana!`, width / 2, height / 2);
-    noLoop();
-  } else {
-    jugador1.show();
-    jugador2.show();
-    pelota.show();
+    text(`Nivel ${level}`, width / 2, height / 2);
+    transitionTimer--;
+    if (transitionTimer <= 0) {
+      transitioning = false;
+      balls.forEach(b => b.speedUp());
+      balls = [new Ball()];
+    }
+    return;
+  }
 
-    jugador1.move();
-    jugador2.move();
-    pelota.move();
+  paddle.display();
+  paddle.move();
 
-    pelota.verificarColisionConJugador(jugador1);
-    pelota.verificarColisionConJugador(jugador2);
+  if (gameStarted) {
+    for (let b of balls) b.move();
+  }
 
-    if (pelota.x < 0) {
-      puntuacionJ2++;
-      pelota.reset();
-    } else if (pelota.x > width) {
-      puntuacionJ1++;
-      pelota.reset();
+  for (let b of balls) {
+    b.display();
+    b.checkEdges(paddle);
+  }
+
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    let block = blocks[i];
+    block.display();
+
+    for (let b of balls) {
+      if (!block.removing && b.hits(block)) {
+        let overlapLeft = b.x + b.r - block.x;
+        let overlapRight = block.x + block.w - (b.x - b.r);
+        let overlapTop = b.y + b.r - block.y;
+        let overlapBottom = block.y + block.h - (b.y - b.r);
+        let minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+        if (minOverlap === overlapTop || minOverlap === overlapBottom) {
+          b.yspeed *= -1;
+        } else {
+          b.xspeed *= -1;
+        }
+
+        if (hitSound && hitSound.isLoaded()) {
+          hitSound.setVolume(random(0.5, 0.8));
+          hitSound.play();
+        }
+
+        if (block.hit()) {
+          block.removing = true;
+
+          if (random() < 0.15) {
+            let type = random() < 0.5 ? 'life' : 'multi';
+            powerUps.push(new PowerUp(block.x + block.w / 2, block.y + block.h / 2, type));
+          }
+        }
+      }
+    }
+
+    if (block.removing) {
+      block.removeProgress += 5;
+      block.y -= 2;
+      if (block.removeProgress > 60) {
+        blocks.splice(i, 1);
+        score++;
+      }
+    }
+  }
+
+  for (let i = powerUps.length - 1; i >= 0; i--) {
+    let p = powerUps[i];
+    p.update();
+    p.display();
+
+    if (p.hitsPaddle(paddle)) {
+      if (p.type === 'life') {
+        lives++;
+      } else if (p.type === 'multi') {
+        let newBalls = [];
+        for (let b of balls) {
+          let newBall = new Ball();
+          newBall.x = b.x;
+          newBall.y = b.y;
+          newBall.xspeed = -b.xspeed;
+          newBall.yspeed = b.yspeed;
+          newBalls.push(newBall);
+        }
+        balls.push(...newBalls);
+      }
+      powerUpSound.play();
+      powerUps.splice(i, 1);
+    } else if (p.offScreen()) {
+      powerUps.splice(i, 1);
+    }
+  }
+
+  displayUI();
+
+  if (blocks.length === 0 && !transitioning) nextLevel();
+
+  for (let i = balls.length - 1; i >= 0; i--) {
+    if (balls[i].offScreen()) {
+      balls.splice(i, 1);
+    }
+  }
+
+  if (balls.length === 0) {
+    lives--;
+    gameStarted = false;
+    if (lives < 0) {
+      background(0);
+      fill(255, 0, 0);
+      textAlign(CENTER, CENTER);
+      textSize(32);
+      text("Game Over", width / 2, height / 2);
+      textSize(16);
+      text("Presiona R para reiniciar", width / 2, height / 2 + 40);
+      noLoop();
+    } else {
+      balls = [new Ball()];
     }
   }
 }
 
 function keyPressed() {
-  if (key === 'W' || key === 'w') {
-    jugador1.setDirection(-1);
-  } else if (key === 'S' || key === 's') {
-    jugador1.setDirection(1);
-  }
+  if (keyCode === LEFT_ARROW) paddle.setDir(-1);
+  else if (keyCode === RIGHT_ARROW) paddle.setDir(1);
+  else if (key === ' ' && !gameStarted && !transitioning) gameStarted = true;
+  else if (key === 'p' || key === 'P') togglePause();
+  else if (key === 'r' || key === 'R') restartGame();
+}
 
-  if (keyCode === UP_ARROW) {
-    jugador2.setDirection(-1);
-  } else if (keyCode === DOWN_ARROW) {
-    jugador2.setDirection(1);
-  }
+function keyReleased() {
+  if (keyCode === LEFT_ARROW || keyCode === RIGHT_ARROW) paddle.setDir(0);
+}
 
-  if (key === 'p' || key === 'P') {
-    mostrarInstrucciones = false;
+function togglePause() {
+  paused = !paused;
+
+  if (paused) {
+    bgMusic.pause();
+  } else {
+    bgMusic.play();
+  }
+}
+
+function restartGame() {
+  if (lives < 0) {
+    lives = 3;
+    score = 0;
+    level = 1;
+    transitioning = false;
+    transitionTimer = 0;
+    createBlocks();
+    balls = [new Ball()];
     loop();
   }
 }
 
-function keyReleased() {
-  if (key === 'W' || key === 'S' || key === 'w' || key === 's') {
-    jugador1.setDirection(0);
-  }
+function displayUI() {
+  select('#Puntos').html(`Puntuación: ${score}`);
+  select('#Vidas').html(`Vidas: ${lives}`);
+  select('#Nivel').html(`Nivel: ${level}`);
 
-  if (keyCode === UP_ARROW || keyCode === DOWN_ARROW) {
-    jugador2.setDirection(0);
+  if (!gameStarted && !transitioning && !paused) {
+    fill(255);
+    textSize(16);
+    textAlign(CENTER);
+    text("Presiona ESPACIO para lanzar la pelota", width / 2, height / 2);
   }
 }
 
-class jugador {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.width = 10;
-    this.height = 100;
-    this.speed = 5;
-    this.direction = 0;
-    this.color = color(random(255), random(255), random(255));
+function createBlocks() {
+  blocks = [];
+  let totalRows = rows + level - 1;
+  let hitsPerLevel = level;
+
+  for (let r = 0; r < totalRows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let x = c * 70 + 35;
+      let y = r * 30 + 30;
+      let hits = hitsPerLevel;
+
+      if (level === 3 && r === 1 && c === 3) hits = -1; // Bloque indestructible en el centro del tercer nivel
+
+      blocks.push(new Block(x, y, hits));
+    }
+  }
+}
+
+function nextLevel() {
+  if (level < 3) {
+    level++;
+    transitioning = true;
+    transitionTimer = transitionDuration;
+    gameStarted = false;
+    createBlocks();
+  } else {
+    // Verificar si solo queda el bloque indestructible para ganar
+    let remainingIndestructible = blocks.filter(block => block.hits === -1);
+    if (remainingIndestructible.length === 1) {
+      fill(0, 255, 0);
+      textAlign(CENTER, CENTER);
+      textSize(32);
+      text("¡Ganaste!", width / 2, height / 2);
+      noLoop();
+    }
+  }
+}
+
+class Paddle {
+  constructor() {
+    this.w = 100;
+    this.h = 15;
+    this.x = width / 2 - this.w / 2;
+    this.y = height - 30;
+    this.dir = 0;
   }
 
-  show() {
-    fill(this.color);
-    rect(this.x, this.y, this.width, this.height);
+  display() {
+    fill(255);
+    rect(this.x, this.y, this.w, this.h);
   }
 
   move() {
-    this.y += this.direction * this.speed;
-    this.y = constrain(this.y, 0, height - this.height);
+    this.x += this.dir * 7;
+    this.x = constrain(this.x, 0, width - this.w);
   }
 
-  setDirection(dir) {
-    this.direction = dir;
-  }
-
-  changeColor() {
-    this.color = color(random(255), random(255), random(255));
+  setDir(dir) {
+    this.dir = dir;
   }
 }
 
-class Pelota {
+class Ball {
   constructor() {
+    this.r = 10;
     this.reset();
-    this.speedIncrement = 1.02; 
-    this.color = color(random(255), random(255), random(255));
   }
 
   reset() {
-    this.x = width / 2;
-    this.y = height / 2;
-    this.xSpeed = random(2, 4) * (random(1) > 0.5 ? 1 : -1);
-    this.ySpeed = random(2, 4) * (random(1) > 0.5 ? 1 : -1);
-    this.size = 20;
-    this.color = color(random(255), random(255), random(255));
-  }
-
-  show() {
-    fill(this.color);
-    ellipse(this.x, this.y, this.size);
+    this.speed = 3 + level;
+    this.x = paddle.x + paddle.w / 2;
+    this.y = paddle.y - this.r;
+    this.xspeed = random([-1, 1]) * this.speed;
+    this.yspeed = -this.speed;
   }
 
   move() {
-    this.x += this.xSpeed;
-    this.y += this.ySpeed;
+    this.x += this.xspeed;
+    this.y += this.yspeed;
+  }
 
-    if (this.y < 0 || this.y > height) {
-      this.ySpeed *= -1;
+  display() {
+    fill(255);
+    ellipse(this.x, this.y, this.r * 2);
+  }
+
+  checkEdges(paddle) {
+    if (this.x < this.r || this.x > width - this.r) this.xspeed *= -1;
+    if (this.y < this.r) this.yspeed *= -1;
+
+    if (
+      this.y + this.r > paddle.y &&
+      this.x > paddle.x &&
+      this.x < paddle.x + paddle.w
+    ) {
+      let hitPoint = (this.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
+      let angle = hitPoint * PI / 3;
+      this.speed = sqrt(this.xspeed ** 2 + this.yspeed ** 2);
+      this.xspeed = this.speed * sin(angle);
+      this.yspeed = -abs(this.speed * cos(angle));
+      this.y = paddle.y - this.r;
     }
   }
 
-  verificarColisionConJugador(jugador) {
-    if (this.x - this.size / 2 < jugador.x + jugador.width &&
-      this.x + this.size / 2 > jugador.x &&
-      this.y + this.size / 2 > jugador.y &&
-      this.y - this.size / 2 < jugador.y + jugador.height) {
+  hits(block) {
+    return (
+      this.x > block.x &&
+      this.x < block.x + block.w &&
+      this.y - this.r < block.y + block.h &&
+      this.y + this.r > block.y
+    );
+  }
 
-      this.xSpeed *= -1;
+  offScreen() {
+    return this.y > height;
+  }
 
-      let offset = (this.y - (jugador.y + jugador.height / 2)) / (jugador.height / 2);
-
-      if (Math.abs(offset) > 0.5) {
-        this.ySpeed = offset * 5; 
-      }
-
-      this.xSpeed *= this.speedIncrement;
-      this.ySpeed *= this.speedIncrement;
-
-      this.color = color(random(255), random(255), random(255));
-      jugador.changeColor();
-
-      if (this.xSpeed > 0) {
-        this.x = jugador.x + jugador.width + this.size / 2;
-      } else {
-        this.x = jugador.x - this.size / 2;
-      }
-    }
+  speedUp() {
+    this.speed += 1;
+    this.xspeed = this.speed * Math.sign(this.xspeed);
+    this.yspeed = -this.speed;
   }
 }
 
+class Block {
+  constructor(x, y, hits) {
+    this.x = x;
+    this.y = y;
+    this.w = 60;
+    this.h = 20;
+    this.hits = hits;
+    this.totalHits = hits;
+    this.removing = false;
+    this.removeProgress = 0;
+  }
 
+  display() {
+    if (this.removing && this.removeProgress > 30) {
+      fill(255, 255, 255, 200 - this.removeProgress * 3);
+    } else if (this.hits === -1) {
+      fill(150);
+    } else {
+      if (this.hits === 3) fill(255, 0, 0);
+      else if (this.hits === 2) fill(255, 165, 0);
+      else if (this.hits === 1) fill(0, 255, 0);
+    }
+    rect(this.x, this.y, this.w, this.h);
+  }
 
+  hit() {
+    if (this.hits === -1) return false;
+    this.hits--;
+    return this.hits <= 0;
+  }
+}
+
+class PowerUp {
+  constructor(x, y, type) {
+    this.x = x;
+    this.y = y;
+    this.type = type;
+    this.size = 20;
+  }
+
+  update() {
+    this.y += 2;
+  }
+
+  display() {
+    fill(this.type === 'life' ? color(255, 0, 0) : color(0, 0, 255));
+    ellipse(this.x, this.y, this.size);
+  }
+
+  hitsPaddle(paddle) {
+    return (
+      this.y + this.size / 2 > paddle.y &&
+      this.y - this.size / 2 < paddle.y + paddle.h &&
+      this.x > paddle.x &&
+      this.x < paddle.x + paddle.w
+    );
+  }
+
+  offScreen() {
+    return this.y > height;
+  }
+}

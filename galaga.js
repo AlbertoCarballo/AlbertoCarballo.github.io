@@ -34,7 +34,7 @@ let shootSound, enemyHitSound, enemyDestroyedSound, playerHitSound, gameOverSoun
 function preload() {
     playerSprite = loadImage('sprites/player.jpg');
     enemySprite = loadImage('sprites/enemy.jpg'); 
-    basicEnemySprite = loadImage('sprites/basic_enemy.jpg');
+    basicEnemySprite = loadImage('sprites/basic_enemy.png');
     zigZagEnemySprite = loadImage('sprites/zigzag_enemy.jpg');
     fastZigZagEnemySprite = loadImage('sprites/fast_zigzag_enemy.jpg');
     resistantEnemySprite = loadImage('sprites/resistant_enemy.jpg');
